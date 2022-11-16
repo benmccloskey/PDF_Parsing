@@ -22,7 +22,12 @@ import dash_bootstrap_components as dbc
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.CYBORG],suppress_callback_exceptions=True)
+
+def make_break(num_breaks):
+    br_list = [html.Br()] * num_breaks
+    return br_list
+
 
 class pdfReader:    
     def __init__(self, file_path: str) -> str:
@@ -140,22 +145,25 @@ class pdfReader:
     
 directory = '/Users/benmccloskey/Desktop/pdf_dashboard/files'
 
-for filename in os.listdir(directory):
-    f = os.path.join(directory, filename)
-    if os.path.isfile(f): 
-        try:
-            pdf = pdfReader(f)
-            text = pdf.PDF_one_pager()
-            df = pd.DataFrame([text])
-        except:
-            pass
-df = pd.DataFrame([text])
+# for filename in os.listdir(directory):
+#     f = os.path.join(directory, filename)
+#     if os.path.isfile(f): 
+#         try:
+#             pdf = pdfReader(f)
+#             text = pdf.PDF_one_pager()
+#             df = pd.DataFrame([text])
+#         except:
+#             pass
+# df = pd.DataFrame([text])
     
 
 
 app.layout = html.Div(children =[html.Div(children =[html.H1(children='PDF Parser', 
                                           style = {'textAlign': 'center',
-                                                   'color' : '#7FDBFF',})]),html.Div([
+                                                   'color' : '#7FDBFF',})]),
+                                 
+                                 
+html.Div([
     dcc.Upload(
         id='upload-data',
         children=html.Div([
@@ -174,11 +182,16 @@ app.layout = html.Div(children =[html.Div(children =[html.H1(children='PDF Parse
         },
         # Allow multiple files to be uploaded
         multiple=True
-    ),
-    html.Div(id='output-data-upload'),
+    ), 
+    #Returns info, above the datatable,
+    html.Div(id='output-datatable'),
+    html.Div(id='output-data-upload')#output for the datatable,
 ]),
                                                        
-])
+
+  ])
+                                                       
+                                                       
 def parse_contents(contents, filename, date):
     content_type, content_string = contents.split(',')
 
@@ -194,45 +207,47 @@ def parse_contents(contents, filename, date):
         elif 'pdf' in filename:
             pdf = pdfReader(directory + '/' + filename)
             text = pdf.PDF_one_pager()
-            df = pd.DataFrame({'text':[text]})
+            df = pd.DataFrame({'Text':[text]})
             #return html.Div(text)
     except Exception as e:
         print(e)
-        return html.Div([
+        return df,html.Div([
             'There was an error processing this file.'
         ])
     
 
     return html.Div([
-        html.H5(filename),
-        html.H6(datetime.datetime.fromtimestamp(date)),
+        html.H5(filename),#return the filename
+        html.H6(datetime.datetime.fromtimestamp(date)),#edit date
+        dcc.Checklist(id='checklist',options = [
+            {"label": "Text", "value": "Text"},
+            {"label": "Date", "value": "Date"},
+            {"label": "Email Addresses", "value": "Email Addresses"}
+        ],
+            value = ['Text']),
 
-        dash_table.DataTable(
-            df.to_dict('records'),
-            [{'name': i, 'id': i} for i in df.columns],
-            style_data={
-                'whiteSpace': 'normal',
-                'height': 'auto',
-                'textAlign': 'left',
-                  'backgroundColor': 'rgb(50, 50, 50)',
-                  'color': 'white'},
-            style_header={'textAlign' : 'left',
-                    'backgroundColor': 'rgb(30, 30, 30)',
-                    'color': 'white'
-                    },
-      ),
+      #   dash_table.DataTable(
+      #       df.to_dict('records'),
+      #       [{'name': i, 'id': i} for i in df.columns],
+      #       style_data={
+      #           'whiteSpace': 'normal',
+      #           'height': 'auto',
+      #           'textAlign': 'left',
+      #             'backgroundColor': 'rgb(50, 50, 50)',
+      #             'color': 'white'},
+      #       style_header={'textAlign' : 'left',
+      #               'backgroundColor': 'rgb(30, 30, 30)',
+      #               'color': 'white'
+      #               },
+      # ),
+        html.Hr(),
+        dcc.Store(id='stored-data' ,data = df.to_dict('records')),
 
         html.Hr(),  # horizontal line
 
-        # For debugging, display the raw contents provided by the web browser
-        html.Div('Raw Content'),
-        html.Pre(contents[0:200] + '...', style={
-            'whiteSpace': 'pre-wrap',
-            'wordBreak': 'break-all'
-        }),
     ])
 
-@app.callback(Output('output-data-upload', 'children'),
+@app.callback(Output('output-datatable', 'children'),
               Input('upload-data', 'contents'),
               State('upload-data', 'filename'),
               State('upload-data', 'last_modified'))
@@ -244,7 +259,35 @@ def update_output(list_of_contents, list_of_names, list_of_dates):
         return children
 
 
+@app.callback(Output('output-data-upload', 'children'),
+              Input('checklist','value'),
+              Input('stored-data', 'data'))
 
+def table_update(options_chosen, df_dict):
+    if options_chosen == []:
+        return options_chosen == []
+    df_copy = pd.DataFrame(df_dict)
+    value_dct = {}
+    for val in options_chosen:
+        if val == 'Text':
+            text = df_copy.Text
+            value_dct[val] = text
+        if val == 'Date':
+            value_dct[val] = ['this is a test']
+    dff =  pd.DataFrame(value_dct)
+    return dash_table.DataTable(
+            dff.to_dict('records'),
+            [{'name': i, 'id': i} for i in dff.columns],
+            style_data={
+                'whiteSpace': 'normal',
+                'height': 'auto',
+                'textAlign': 'left',
+                  'backgroundColor': 'rgb(50, 50, 50)',
+                  'color': 'white'},
+            style_header={'textAlign' : 'left',
+                    'backgroundColor': 'rgb(30, 30, 30)',
+                    'color': 'white'
+                    })
 
 if __name__ == '__main__':
     app.run_server(debug=True)
